@@ -29,6 +29,7 @@ class QuadrotorMPC2:
             self.generate_mpc()
         else:
             try:
+                print("\n\n\n \nhere\n\n\n")
                 sys.path.append(code_export_directory)
                 acados_ocp_solver_pyx = importlib.import_module('acados_ocp_solver_pyx')
                 self.ocp_solver = acados_ocp_solver_pyx.AcadosOcpSolverCython(self.model_name, 'SQP', self.num_steps)
