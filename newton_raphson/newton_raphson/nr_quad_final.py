@@ -1,7 +1,3 @@
-#Finished integrating NN predictor and jacobian. nr_NN_final also has the code but my setup.py file didn't wanna work with it so I got it all done here.
-# so this is effectively the final version of NN version
-
-
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -31,6 +27,11 @@ import ctypes
 # import torch.optim as optim
 import time
 from torch.autograd import Function
+
+
+
+
+
 
 
 class OffboardControl(Node):
@@ -66,7 +67,7 @@ class OffboardControl(Node):
 
         # Figure out if in simulation or hardware mode to set important variables to the appropriate values
         self.sim = bool(int(input("Are you using the simulator? Write 1 for Sim and 0 for Hardware: ")))
-        # print(f"sim: {self.sim}")
+        print(f"{'Simulation' if self.sim else 'Hardware'} Mode Selected")
         self.nr_time_el = []
 
 ###############################################################################################################################################
@@ -121,6 +122,7 @@ class OffboardControl(Node):
 
         # Initialize variables:
         self.data_buffer = []
+        self.time_buffer = []
         self.time_before_land = 20.0
         print(f"time_before_land: {self.time_before_land}")
         self.offboard_setpoint_counter = 0 #helps us count 10 cycles of sending offboard heartbeat before switching to offboard mode and arming
@@ -171,6 +173,7 @@ class OffboardControl(Node):
         print(f"Predictor #{self.pred_type}: Using {'NN' if self.pred_type == 2 else 'Linear' if self.pred_type == 1 else 'Nonlinear'} Predictor")
 
 
+
         if self.pred_type == 2:
             self.NN_type = int(input("Feedforward, LSTM, or RNN? Write 0 for Feedforward, 1 for LSTM, 2 for RNN, and 3 for DEQ: "))
             if self.NN_type == 0:
@@ -198,9 +201,7 @@ class OffboardControl(Node):
                 if self.sim:
                     self.NN.load_state_dict(torch.load('/home/factslabegmc/NRJournal/src/newton_raphson/newton_raphson/SIM_Quad_FF_model50k.pt'))
                 else:
-                    print("Don't have trained model for hardware yet")
-                    exit(0)
-
+                    self.NN.load_state_dict(torch.load('/home/factslabegmc/NRJournal/src/newton_raphson/newton_raphson/holybro_ff.pt'))
 
             elif self.NN_type == 1:
                 print("Using LSTM NN")
@@ -219,9 +220,7 @@ class OffboardControl(Node):
                 if self.sim:
                     self.NN.load_state_dict(torch.load('/home/factslabegmc/NRJournal/src/newton_raphson/newton_raphson/SIM_Quad_LSTM_model50k.pt'))
                 else:
-                    print("Don't have trained model for hardware yet")
-                    exit(0)
-
+                    self.NN.load_state_dict(torch.load('/home/factslabegmc/NRJournal/src/newton_raphson/newton_raphson/holybro_lstm.pt'))
             elif self.NN_type == 2:
                 print("Using RNN NN")
                 # Define the RNN model class
@@ -254,8 +253,7 @@ class OffboardControl(Node):
                 if self.sim:
                     self.NN.load_state_dict(torch.load('/home/factslabegmc/NRJournal/src/newton_raphson/newton_raphson/SIM_Quad_RNN_model50k.pt'))
                 else:
-                    print("Don't have trained model for hardware yet")
-                    exit(0)
+                    self.NN.load_state_dict(torch.load('/home/factslabegmc/NRJournal/src/newton_raphson/newton_raphson/holybro_rnn.pt'))
 
 
             elif self.NN_type == 3:
@@ -495,14 +493,15 @@ class OffboardControl(Node):
                         max_iter=300,
                         tol=1e-2,
                         m=1.0)
-                # self.NN.load_state_dict(torch.load('/home/factslabegmc/newtonraphson_final_ws/src/newton_raphson/newton_raphson/DEQ_model50k.pt'))
+                
                 if self.sim:
-                    self.NN.load_state_dict(torch.load('/home/factslabegmc/NRJournal/src/newton_raphson/newton_raphson/SIM_Quad_DEQ_model50k.pt'))
+                    self.NN.load_state_dict(torch.load('/home/factslabegmc/newtonraphson_final_ws/src/newton_raphson/newton_raphson/DEQ_model50k.pt'))
                 else:
-                    print("Don't have trained model for hardware yet")
-                    exit(0)
+                    self.NN.load_state_dict(torch.load('/home/factslabegmc/newtonraphson_final_ws/src/newton_raphson/newton_raphson/holybro_deq.pt'))
 
-        # exit(0)
+
+
+
         # Initialize Matrices for Linearized Model Prediction and NR Input Calculation (eAT, int_eATB, int_eAT, C, jac_inv)
         # self.linearized_model() #Calculate Linearized Model Matrices
         # self.jac_inv = np.linalg.inv(self.getyorai_gJac_linear_predict()) #Calculate Inverse Jacobian of Linearized Model Matrices
@@ -741,18 +740,18 @@ class OffboardControl(Node):
             self.timefromstart = time.time()-self.T0 #update curent time from start of program for reference trajectories and for switching between NR and landing mode
             
 
-            # print(f"--------------------------------------")
+            print(f"--------------------------------------")
             # print(self.vehicle_status.nav_state)
             if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-                print(f"\t\t\t\t\t NR_callback- timefromstart: {self.timefromstart}")
-                print("\t\t\t\t\t\t\t IN OFFBOARD MODE")
+                print(f"NR_callback- timefromstart: {self.timefromstart}")
+                print("IN OFFBOARD MODE")
 
                 if self.timefromstart <= self.time_before_land: # wardi controller for first {self.time_before_land} seconds
-                    print("\t\t\t\t\t\t Newton-Raphson Control")
+                    print("Newton-Raphson Control")
                     self.newton_raphson_control()
 
                 elif self.timefromstart > self.time_before_land: #then land at origin and disarm
-                    print("\t\t\t\t\t\t\t\t BACK TO SPAWN")
+                    print("BACK TO SPAWN")
                     self.publish_position_setpoint(0.0, 0.0, -0.3)
                     print(f"self.x: {self.x}, self.y: {self.y}, self.z: {self.z}")
                     if abs(self.x) < 0.1 and abs(self.y) < 0.1 and abs(self.z) <= 0.50:
@@ -761,7 +760,7 @@ class OffboardControl(Node):
 
             if self.timefromstart > self.time_before_land:
                 if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LAND:
-                        print("\t\t\t\t\t\t\t IN LAND MODE")
+                        print("IN LAND MODE")
                         if abs(self.z) <= .18:
                             print("Disarming and Exiting Program")
                             self.disarm()
@@ -778,9 +777,8 @@ class OffboardControl(Node):
 
                             # print(f'Data has been written to {csv_file}')
                             exit(0)
-            print(f"####################################################################################################################################")
-            # print("\n\n")
-
+            print(f"--------------------------------------")
+            print("\n\n")
         else:
             print("NR_Callback: Channel 11 Switch Not Set to Offboard")
 
@@ -899,21 +897,19 @@ class OffboardControl(Node):
         nrt0 = time.time() # time before NR calculations
         # newton-raphson control input calculation without speed-up parameter (udot = inv(dg/du) * (yref - ypred) = NR) (alpha comes later)
 
-        print("-------------------------------------------------------------------------------------------------------------------------------------")
-        print("\n\n\n")
-        print("-------------------------------------------------------------------------------------------------------------------------------------")
-        print(f"####################################################################################################################################")
 
+        print("\n\n\n\n\n")
+        print("######################################################################")
         t1 = time.time() # time before prediction
 
         if self.pred_type == 1:
-            print(f"\t\t\t\t\t\t\t Getting Linear Prediction")
+            print(f"Getting Linear Prediction")
             pred = self.getyorai_g_linear_predict(lastinput) # predicts system output state T_lookahead seconds in the future
         elif self.pred_type == 0:
-            print(f"\t\t\t\t\t Getting Numerically Integrated Nonlinear Model Prediction")
+            print(f"Getting Numerically Integrated Nonlinear Model Prediction")
             pred = self.get_nonlin_predict3(lastinput) # predicts system output state T_lookahead seconds in the future
         elif self.pred_type == 2:
-            print(f"\t\t\t\t\t\t\t Getting NN Prediction")
+            print(f"Getting NN Prediction")
             pred = self.nn_predict1(lastinput)
 
         # print(f"NN_pred: {NN_pred}")
@@ -922,7 +918,8 @@ class OffboardControl(Node):
         pred = pred
         # print(f"time to predict: {time.time()-t1}")
         # print(f"pred: {pred[0:]}")
-        print(f"####################################################################################################################################")
+        print("######################################################################")
+        print("\n\n\n\n\n")
         # exit(0)
 
         pred=pred
@@ -1014,10 +1011,10 @@ class OffboardControl(Node):
         change_u = udot * self.newton_raphson_timer_period #crude integration of udot to get u (maybe just use 0.02 as period)
 
         # alpha=np.array([[10,10,10,10]]).T
-        alpha=np.array([[20,30,30,30]]).T # Speed-up parameter (maybe play with uniform alpha values rather than ones that change for each input)
+        # alpha=np.array([[20,30,30,30]]).T # Speed-up parameter (maybe play with uniform alpha values rather than ones that change for each input)
         # alpha=np.array([[40,40,40,40]]).T # Speed-up parameter (maybe play with uniform alpha values rather than ones that change for each input)
-        # alpha=np.array([[45,45,45,45]]).T # Speed-up parameter (maybe play with uniform alpha values rather than ones that change for each input)
-        # print("alpha: ", alpha)
+        alpha=np.array([[45,45,45,45]]).T # Speed-up parameter (maybe play with uniform alpha values rather than ones that change for each input)
+
         update_u = alpha * change_u
         u = lastinput + alpha * change_u # u_new = u_old + alpha * change_u
 
@@ -1073,6 +1070,7 @@ class OffboardControl(Node):
         dataNN = torch.cat([stateVector, inputVector])
         print(f"dataNN: {dataNN}")
 
+        t0 = time.time()
         if self.NN_type == 0: # Feed Forward NN
             print("Feed Forward NN")
             outputNN = self.NN(dataNN)
@@ -1089,7 +1087,7 @@ class OffboardControl(Node):
                 outputNN[i].backward(retain_graph=True)  # Compute gradients
                 jacobian[i] = inputVector.grad
 
-            # print("Jacobian Matrix:\n", jacobian)
+            print("Jacobian Matrix:\n", jacobian)
 
             inv_jac = np.linalg.inv(jacobian)
             # print(f"inv_jac: {inv_jac}")
@@ -1100,7 +1098,7 @@ class OffboardControl(Node):
 
             outputNN = outputNN.detach().numpy()
             outputNN = np.array([[outputNN[0], outputNN[1], outputNN[2], outputNN[3]]]).T
-            # print(f"outputNN: {outputNN.shape}")
+            print(f"outputNN: {outputNN.shape}")
             # exit(0)
 
         elif self.NN_type == 1: # LSTM NN
@@ -1125,7 +1123,7 @@ class OffboardControl(Node):
                 # Copy the gradient to the Jacobian matrix
                 jacobianLSTM[i] = inputVector.grad.clone()
 
-            # print("Jacobian Matrix:\n", jacobianLSTM)
+            print("Jacobian Matrix:\n", jacobianLSTM)
             inv_jacLSTM = np.linalg.inv(jacobianLSTM)
             # print(inv_jacLSTM)
             # print(f"inv_jac: {inv_jac}")
@@ -1171,7 +1169,7 @@ class OffboardControl(Node):
                 # Copy the gradient to the Jacobian matrix
                 jacobianRNN[i] = inputVector.grad.clone()
 
-            # print("Jacobian Matrix:\n", jacobianRNN)
+            print("Jacobian Matrix:\n", jacobianRNN)
             inv_jacRNN = np.linalg.inv(jacobianRNN)
             # print(f"inv_jac: {inv_jac}")
             inv_jacRNN[:, 2] = -inv_jacRNN[:, 2]
@@ -1185,7 +1183,6 @@ class OffboardControl(Node):
             outputNN = np.array([[outputNN[0], outputNN[1], outputNN[2], outputNN[3]]]).T
             print(f"outputNN: {outputNN.shape}")
             # exit(0)
-            
 
 
         elif self.NN_type == 3: #DEQ
@@ -1216,7 +1213,7 @@ class OffboardControl(Node):
                 # Copy the gradient to the Jacobian matrix
                 jacobianRNN[i] = inputVector.grad.clone()
 
-            # print("Jacobian Matrix:\n", jacobianRNN)
+            print("Jacobian Matrix:\n", jacobianRNN)
             inv_jacRNN = np.linalg.inv(jacobianRNN)
             # print(f"inv_jac: {inv_jac}")
             inv_jacRNN[:, 2] = -inv_jacRNN[:, 2]
@@ -1225,7 +1222,7 @@ class OffboardControl(Node):
             print(f"self.jac_inv: {self.jac_inv}")
             outputNN = outputNN.detach().numpy().reshape(4,1)
 
-
+        self.time_buffer.append(time.time()-t0)
         return outputNN
 
 

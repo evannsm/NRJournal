@@ -20,11 +20,10 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'ros2_acados = mpc_comparison.ros2_acados_works:main',
-            'ros2_pxy_load = mpc_comparison.ros2_pxy_load_works:main',
-            'ros2_px4_integration = mpc_comparison.ros2_px4_integration:main',
-            'ros2_traj_work = mpc_comparison.trajectory_work:main',
-            'MPC_done = mpc_comparison.working_MPC:main',
+            # 'holybroMPC = mpc_comparison.holybroMPC:main',
+            # 'testImportMPC = mpc_comparison.testImportMPC:main',
+            'christianBased_MPC = mpc_comparison.christianbased_holybroMPC:main',
+            'holybroMPC = mpc_comparison.holybroMPC:main',
         ],
     },
 )
