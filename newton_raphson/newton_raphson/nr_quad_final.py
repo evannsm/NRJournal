@@ -123,7 +123,7 @@ class OffboardControl(Node):
         # Initialize variables:
         self.data_buffer = []
         self.time_buffer = []
-        self.time_before_land = 20.0
+        self.time_before_land = 25.0
         print(f"time_before_land: {self.time_before_land}")
         self.offboard_setpoint_counter = 0 #helps us count 10 cycles of sending offboard heartbeat before switching to offboard mode and arming
         self.vehicle_status = VehicleStatus() #vehicle status variable to make sure we're in offboard mode before sending setpoints
@@ -574,10 +574,11 @@ class OffboardControl(Node):
 
     def rc_channel_callback(self, rc_channels):
         """Callback function for RC Channels to create a software 'killswitch' depending on our flight mode channel (position vs offboard vs land mode)"""
-        # print('rc channel callback')
-        mode_channel = 5
+        print('IN RC Channel Callback')
+        mode_channel = 11
         flight_mode = rc_channels.channels[mode_channel-1] # +1 is offboard everything else is not offboard
-        self.offboard_mode_rc_switch_on = True if flight_mode >= 0.75 else False
+        print(f"{flight_mode= }")
+        self.offboard_mode_rc_switch_on = True if flight_mode == 0.0 else False
 
 
     # The following 2 functions are used to publish offboard control heartbeat signals
@@ -660,6 +661,9 @@ class OffboardControl(Node):
         # print(f"old_yaw: {self.yaw}")
         self.yaw = self.angle_wrapper(self.yaw)
         self.pitch = -1 * self.pitch #pitch is negative of the value in gazebo bc of frame difference
+        print("\n\n\n#############################")
+        print(f"{msg.q = }")
+        print(f"(roll, pitch, yaw)={self.roll, self.pitch, self.yaw}")
 
         self.p = msg.angular_velocity[0]
         self.q = msg.angular_velocity[1]
@@ -678,6 +682,9 @@ class OffboardControl(Node):
         # print(f"Yaw: {self.yaw}")
         
         self.stateVector = np.array([[self.x, self.y, self.z, self.vx, self.vy, self.vz, self.roll, self.pitch, self.yaw]]).T 
+        print(f"{self.stateVector = }")
+        print("#############################\n\n\n")
+
         self.nr_state = np.array([[self.x, self.y, self.z, self.yaw]]).T
         self.odom_rates = np.array([[self.p, self.q, self.r]]).T
 
@@ -713,7 +720,7 @@ class OffboardControl(Node):
 # ~~ The following 2 functions are the main functions that run at 10Hz and 100Hz ~~
     def offboard_mode_timer_callback(self) -> None: # ~~Runs at 10Hz and Sets Vehicle to Offboard Mode  ~~
         """Offboard Callback Function for The 10Hz Timer."""
-        # print("In offboard timer callback")
+        print("In offboard timer callback")
 
         if self.offboard_mode_rc_switch_on: #integration of RC 'killswitch' for offboard deciding whether to send heartbeat signal, engage offboard, and arm
             if self.timefromstart <= self.time_before_land:
@@ -797,14 +804,14 @@ class OffboardControl(Node):
 
         # reffunc = self.circle_vert_ref_func() #FIX THIS SHIT B4 RUNNING
         # reffunc = self.circle_horz_ref_func()
-        reffunc = self.fig8_horz_ref_func()
+        # reffunc = self.fig8_horz_ref_func()
         # reffunc = self.fig8_vert_ref_func_short()
         # reffunc = self.fig8_vert_ref_func_tall()
-        # reffunc = self.hover_ref_func(1)
-        # if self.timefromstart <= 10.0:
-        #     reffunc = self.hover_ref_func(5)
-        # elif self.timefromstart > 10.0:
-        #     reffunc = self.hover_ref_func(1)
+        # reffunc = self.hover_ref_func(8)
+        if self.timefromstart <= self.time_before_land/2:
+            reffunc = self.hover_ref_func(14)
+        elif self.timefromstart > self.time_before_land/2:
+            reffunc = self.hover_ref_func(15)
 
         print(f"reffunc: {reffunc}")
 
@@ -1595,12 +1602,19 @@ class OffboardControl(Node):
         hover_dict = {
             1: np.array([[0.0, 0.0, -0.5, 0.0]]).T,
             2: np.array([[0.0, 1.5, -1.5, 0.0]]).T,
-            3: np.array([[1.5, 0.0, -1.5, 0.0]]).T,
+            3: np.array([[3.5, 0.0, -1.5, 0.0]]).T,
             4: np.array([[1.5, 1.5, -1.5, 0.0]]).T,
             5: np.array([[0.0, 0.0, -10.0, 0.0]]).T,
             6: np.array([[1.0, 1.0, -4.0, 0.0]]).T,
-            7: np.array([[3.0, 4.0, -5.0, 0.0]]).T,
-            8: np.array([[1.0, 1.0, -3.0, 0.0]]).T,
+            7: np.array([[1.0, 1.0, -3.0, 0.0]]).T,
+            8: np.array([[0.0, -3.0, -1.0, 0.0]]).T,
+            9: np.array([[0.0, -5.0, -1.0, 0.0]]).T,
+            10: np.array([[2.0, 2.0, -1.0, 0.0]]).T,
+            11: np.array([[-2.0, -2.0, -1.0, 0.0]]).T,
+            12: np.array([[0.0, 3.5, -1.0, 0.0]]).T,
+            13: np.array([[0.0, 6.0, -1.0, 0.0]]).T,
+            14: np.array([[4.5, 0.0, -1.0, 0.0]]).T,
+            15: np.array([[7.0, 0.0, -1.0, 0.0]]).T,
         }
         if num > len(hover_dict) or num < 1:
             print(f"hover1- #{num} not found")
