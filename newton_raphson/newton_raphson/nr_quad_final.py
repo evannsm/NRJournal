@@ -113,7 +113,7 @@ class OffboardControl(Node):
                 VehicleOdometry, '/fmu/out/vehicle_odometry', self.vehicle_odometry_callback, qos_profile)
         else:
             self.vehicle_odometry_subscriber = self.create_subscription( #subscribes to odometry data (position, velocity, attitude)
-                VehicleOdometry, '/fmu/out/vehicle_visual_odometry', self.vehicle_odometry_callback, qos_profile)    
+                VehicleOdometry, '/fmu/in/vehicle_visual_odometry', self.vehicle_odometry_callback, qos_profile)    
                   
         self.vehicle_status_subscriber = self.create_subscription( #subscribes to vehicle status (arm, offboard, disarm, etc)
             VehicleStatus, '/fmu/out/vehicle_status', self.vehicle_status_callback, qos_profile)
