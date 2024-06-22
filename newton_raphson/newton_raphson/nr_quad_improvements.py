@@ -113,8 +113,7 @@ class OffboardControl(Node):
                 VehicleOdometry, '/fmu/out/vehicle_odometry', self.vehicle_odometry_callback, qos_profile)
         else:
             self.vehicle_odometry_subscriber = self.create_subscription( #subscribes to odometry data (position, velocity, attitude)
-                VehicleOdometry, '/fmu/out/vehicle_visual_odometry', self.vehicle_odometry_callback, qos_profile)    
-                  
+                VehicleOdometry, '/fmu/in/vehicle_visual_odometry', self.vehicle_odometry_callback, qos_profile)
         self.vehicle_status_subscriber = self.create_subscription( #subscribes to vehicle status (arm, offboard, disarm, etc)
             VehicleStatus, '/fmu/out/vehicle_status', self.vehicle_status_callback, qos_profile)
     
@@ -586,7 +585,6 @@ class OffboardControl(Node):
         self.offboard_mode_rc_switch_on = True if flight_mode == 1.0 else False
 
 
-
     # The following 2 functions are used to publish offboard control heartbeat signals
     def publish_offboard_control_heartbeat_signal2(self): #1)Offboard Signal2 for Returning to Origin with Position Control
         """Publish the offboard control mode."""
@@ -726,39 +724,43 @@ class OffboardControl(Node):
 # ~~ The following 2 functions are the main functions that run at 10Hz and 100Hz ~~
     def offboard_mode_timer_callback(self) -> None: # ~~Runs at 10Hz and Sets Vehicle to Offboard Mode  ~~
         """Offboard Callback Function for The 10Hz Timer."""
-        print("In offboard timer callback")
+        print("\n\n\n\n\nIn offboard timer callback")
+        print("HERERERJKLEJFKSL:DJDSKL\n\n\n\n\n")
 
         if self.offboard_mode_rc_switch_on: #integration of RC 'killswitch' for offboard deciding whether to send heartbeat signal, engage offboard, and arm
-            if self.timefromstart <= self.time_before_land:
-                self.publish_offboard_control_heartbeat_signal1()
-            elif self.timefromstart > self.time_before_land:
-                self.publish_offboard_control_heartbeat_signal2()
+            if self.vehicle_status.arming_state == 2:
+                if self.timefromstart <= self.time_before_land:
+                    self.publish_offboard_control_heartbeat_signal1()
+                elif self.timefromstart > self.time_before_land:
+                    self.publish_offboard_control_heartbeat_signal2()
+                
 
-            if self.offboard_setpoint_counter == 10:
-                self.engage_offboard_mode()
-                self.arm()
-            if self.offboard_setpoint_counter < 11:
-                self.offboard_setpoint_counter += 1
+            elif self.vehicle_status.arming_state == 1:
+                print("sending arm signal")
+                if self.offboard_setpoint_counter == 10:
+                    self.engage_offboard_mode()
+                    self.arm()
+                if self.offboard_setpoint_counter < 11:
+                    self.offboard_setpoint_counter += 1
 
         else:
-            print("Offboard Callback: RC Flight Mode Channel 5 Switch Not Set to Offboard (+1: offboard) ")
+            print("Offboard Callback: RC Flight Mode Channel 5 Switch Not Set to Offboard (-1: position, 0: offboard, 1: land) ")
             self.offboard_setpoint_counter = 0
 
 
 
     def newton_raphson_timer_callback(self) -> None: # ~~This is the main function that runs at 100Hz and Administrates Calls to Every Other Function ~~
-        print(f"\n\n\n --------------------------------------")
+        print(f"\n\n --------------------------------------")
         print("NR_Callback")
+        print(f"{self.vehicle_status.nav_state= }")
+        print(f"{VehicleStatus.NAVIGATION_STATE_OFFBOARD=}")
+        print(f"{self.vehicle_status.arming_state=}")
         if self.offboard_mode_rc_switch_on: #integration of RC 'killswitch' for offboard deciding whether to send heartbeat signal, engage offboard, and arm
             self.timefromstart = time.time()-self.T0 #update curent time from start of program for reference trajectories and for switching between NR and landing mode
             
 
-            print(f"{self.vehicle_status.nav_state= }")
-            print(f"{VehicleStatus.NAVIGATION_STATE_OFFBOARD=}")
-            print(f"{self.vehicle_status.arming_state= }")
-            print(f"{VehicleStatus.ARMING_STATE_ARMED=}")
-            if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_ARMED:
-                if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+                if self.vehicle_status.arming_state == 2:
                     print(f"NR_callback- timefromstart: {self.timefromstart}")
                     print("IN OFFBOARD MODE")
 
@@ -774,9 +776,10 @@ class OffboardControl(Node):
                             print("Switching to Land Mode")
                             self.land()
                 else:
-                    print("Vehicle not officially in Offboard Mode")
+                    print("not armed officially")
             else:
-                print("Vehicle not officially Armed Yet")
+                print("not offboard officially")
+
             if self.timefromstart > self.time_before_land:
                 if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LAND:
                         print("IN LAND MODE")
@@ -796,9 +799,9 @@ class OffboardControl(Node):
 
                             # print(f'Data has been written to {csv_file}')
                             exit(0)
-            print(f"--------------------------------------\n\n\n")
+            print(f"--------------------------------------\n\n")
         else:
-            print("NR_Callback: Channel 5 Switch Not Set to Offboard")
+            print("NR_Callback: Channel 11 Switch Not Set to Offboard")
 
     
 # ~~ From here down are the functions that actually calculate the control input ~~
@@ -813,16 +816,16 @@ class OffboardControl(Node):
 
         # Calculate the current reference trajectory
 
-        reffunc = self.circle_vert_ref_func() #FIX THIS SHIT B4 RUNNING
+        # reffunc = self.circle_vert_ref_func() #FIX THIS SHIT B4 RUNNING
         # reffunc = self.circle_horz_ref_func()
         # reffunc = self.fig8_horz_ref_func()
         # reffunc = self.fig8_vert_ref_func_short()
         # reffunc = self.fig8_vert_ref_func_tall()
         # reffunc = self.hover_ref_func(8)
-        # if self.timefromstart <= self.time_before_land/2:
-        #     reffunc = self.hover_ref_func(14)
-        # elif self.timefromstart > self.time_before_land/2:
-        #     reffunc = self.hover_ref_func(15)
+        if self.timefromstart <= self.time_before_land/2:
+            reffunc = self.hover_ref_func(14)
+        elif self.timefromstart > self.time_before_land/2:
+            reffunc = self.hover_ref_func(15)
 
         print(f"reffunc: {reffunc}")
 
@@ -1029,7 +1032,10 @@ class OffboardControl(Node):
         change_u = udot * self.newton_raphson_timer_period #crude integration of udot to get u (maybe just use 0.02 as period)
 
         # alpha=np.array([[10,10,10,10]]).T
-        alpha=np.array([[20,30,30,30]]).T # Speed-up parameter (maybe play with uniform alpha values rather than ones that change for each input)
+        # alpha=np.array([[20,30,30,30]]).T # Speed-up parameter (maybe play with uniform alpha values rather than ones that change for each input)
+        # alpha=np.array([[40,40,40,40]]).T # Speed-up parameter (maybe play with uniform alpha values rather than ones that change for each input)
+        alpha=np.array([[45,45,45,45]]).T # Speed-up parameter (maybe play with uniform alpha values rather than ones that change for each input)
+
         update_u = alpha * change_u
         u = lastinput + alpha * change_u # u_new = u_old + alpha * change_u
 
