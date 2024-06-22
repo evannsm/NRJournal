@@ -40,31 +40,6 @@ class OffboardControl(Node):
         super().__init__('offboard_control_takeoff_and_land')
 
 ###############################################################################################################################################
-        class Vector9x1(ctypes.Structure):
-            _fields_ = [
-                ('x', ctypes.c_double),
-                ('y', ctypes.c_double),
-                ('z', ctypes.c_double),
-                ('vx', ctypes.c_double),
-                ('vy', ctypes.c_double),
-                ('vz', ctypes.c_double),
-                ('roll', ctypes.c_double),
-                ('pitch', ctypes.c_double),
-                ('yaw', ctypes.c_double),
-            ]
-
-        # Load the C shared library
-        self.my_library = ctypes.CDLL('/home/factslabegmc//newtonraphson_final_ws/src/newton_raphson/newton_raphson/libwork.so')  # Update the library filename
-
-        # Set argument and return types for the function
-        self.my_library.performCalculations.argtypes = [
-            ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
-            ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
-            ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_int
-        ]
-        self.my_library.performCalculations.restype = ctypes.POINTER(Vector9x1)
-###############################################################################################################################################
-
         # Figure out if in simulation or hardware mode to set important variables to the appropriate values
         self.sim = bool(int(input("Are you using the simulator? Write 1 for Sim and 0 for Hardware: ")))
         print(f"{'Simulation' if self.sim else 'Hardware'} Mode Selected")
@@ -159,27 +134,48 @@ class OffboardControl(Node):
             self.m = 1.69 #weighed the drone with everything on it including battery: 3lb 11.7oz -> 3.73lbs -> 1.69kg
             self.gravmass = 1.73
 
-        # exit(0)
         self.u0 = np.array([[self.get_throttle_command_from_force(-1*self.m*self.g), 0, 0, 0]]).T
         print(f"u0: {self.u0}")
-        # exit(0)
-        # exit(0)
+
 
 ###############################################################################################################################################
-
+        # Getting predictor type
         self.pred_type = int(input("Neural Network, Linear, or Nonlinear -based Predictor? Write 2 for NN, 1 for Linear and 0 for Nonlinear: "))
-        # self.linpred
-        if self.pred_type == 1:
-            # print("Using Linear Predictor")
-            self.linearized_model() #Calculate Linearized Model Matrices
-        else:
-            self.C = self.observer_matrix() #Calculate Observer Matrix
-
         print(f"Predictor #{self.pred_type}: Using {'NN' if self.pred_type == 2 else 'Linear' if self.pred_type == 1 else 'Nonlinear'} Predictor")
+        self.C = self.observer_matrix() #Calculate Observer Matrix
 
+        if self.pred_type == 0:
+            print("Using Nonlinear Predictor")
+            class Vector9x1(ctypes.Structure):
+                _fields_ = [
+                    ('x', ctypes.c_double),
+                    ('y', ctypes.c_double),
+                    ('z', ctypes.c_double),
+                    ('vx', ctypes.c_double),
+                    ('vy', ctypes.c_double),
+                    ('vz', ctypes.c_double),
+                    ('roll', ctypes.c_double),
+                    ('pitch', ctypes.c_double),
+                    ('yaw', ctypes.c_double),
+                ]
 
+            # Load the C shared library
+            self.my_library = ctypes.CDLL('/home/factslabegmc//newtonraphson_final_ws/src/newton_raphson/newton_raphson/libwork.so')  # Update the library filename
 
+            # Set argument and return types for the function
+            self.my_library.performCalculations.argtypes = [
+                ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
+                ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
+                ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_int
+            ]
+            self.my_library.performCalculations.restype = ctypes.POINTER(Vector9x1)
+
+        if self.pred_type == 1:
+            print("Using Linear Predictor")
+            self.linearized_model() #Calculate Linearized Model Matrices
+            
         if self.pred_type == 2:
+            print("Using Neural Network Predictor")
             self.NN_type = int(input("Feedforward, LSTM, or RNN? Write 0 for Feedforward, 1 for LSTM, 2 for RNN, and 3 for DEQ: "))
             if self.NN_type == 0:
                 print("Using Feedforward NN")
