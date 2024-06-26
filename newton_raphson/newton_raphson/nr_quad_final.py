@@ -116,11 +116,6 @@ class OffboardControl(Node):
         #mass of drone (kg) used in linearized model function, there's a slighly different mass used for gravity to offset constant error in z-direction
         
 
-        # The following 3 variables are used to convert between force and throttle commands (iris gazebo simulation)
-        self.motor_constant_ = 0.00000584 #iris gazebo simulation motor constant
-        self.motor_velocity_armed_ = 100 #iris gazebo motor velocity when armed
-        self.motor_input_scaling_ = 1000.0 #iris gazebo simulation motor input scaling
-
 
 ###############################################################################################################################################
 
@@ -129,6 +124,12 @@ class OffboardControl(Node):
             print("Using simulator throttle from force conversion function")
             self.m = 1.535 #set simulation mass from iris model sdf for linearized model calculations
             self.gravmass = 1.55 #offset gravitational mass to change throttle over/under compensation to make trajectory more accurate in z-direction
+        
+            # The following 3 variables are used to convert between force and throttle commands (iris gazebo simulation)
+            self.motor_constant_ = 0.00000584 #iris gazebo simulation motor constant
+            self.motor_velocity_armed_ = 100 #iris gazebo motor velocity when armed
+            self.motor_input_scaling_ = 1000.0 #iris gazebo simulation motor input scaling
+
         elif not self.sim:
             print("Using hardware throttle from force conversion function and certain trajectories will not be available")
             self.m = 1.69 #weighed the drone with everything on it including battery: 3lb 11.7oz -> 3.73lbs -> 1.69kg
@@ -576,11 +577,13 @@ class OffboardControl(Node):
     def rc_channel_callback(self, rc_channels):
         """Callback function for RC Channels to create a software 'killswitch' depending on our flight mode channel (position vs offboard vs land mode)"""
         print('IN RC Channel Callback')
-        mode_channel = 5
+        mode_channel = 11
         flight_mode = rc_channels.channels[mode_channel-1] # +1 is offboard everything else is not offboard
-        print(f"{flight_mode= }")
+        print(f"current desired flight mode from channel 11 switch is: {'POSITION' if flight_mode==-1.0 else 'MANUAL' if flight_mode==0.0 else 'OFFBOARD' if flight_mode==1.0 else 'ERROR'}")
+        if flight_mode not in [-1.0, 0.0, 1.0]:
+            raise ValueError("Invalid Value for Channel 11 Flight Mode Switch. Only values of -1.0, 0.0, and 1.0 are allowed.")
         self.offboard_mode_rc_switch_on = True if flight_mode == 1.0 else False
-
+        print(f"{self.offboard_mode_rc_switch_on=}")
 
 
     # The following 2 functions are used to publish offboard control heartbeat signals
@@ -745,14 +748,14 @@ class OffboardControl(Node):
     def newton_raphson_timer_callback(self) -> None: # ~~This is the main function that runs at 100Hz and Administrates Calls to Every Other Function ~~
         print(f"\n\n\n --------------------------------------")
         print("NR_Callback")
+        print(f"{self.vehicle_status.nav_state= }")
+        print(f"{VehicleStatus.NAVIGATION_STATE_OFFBOARD=}")
+        print(f"{self.vehicle_status.arming_state= }")
+        print(f"{VehicleStatus.ARMING_STATE_ARMED=}")
+        print(f"{VehicleStatus.NAVIGATION_STATE_AUTO_LAND=}")
         if self.offboard_mode_rc_switch_on: #integration of RC 'killswitch' for offboard deciding whether to send heartbeat signal, engage offboard, and arm
             self.timefromstart = time.time()-self.T0 #update curent time from start of program for reference trajectories and for switching between NR and landing mode
             
-
-            print(f"{self.vehicle_status.nav_state= }")
-            print(f"{VehicleStatus.NAVIGATION_STATE_OFFBOARD=}")
-            print(f"{self.vehicle_status.arming_state= }")
-            print(f"{VehicleStatus.ARMING_STATE_ARMED=}")
             if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_ARMED:
                 if self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
                     print(f"NR_callback- timefromstart: {self.timefromstart}")
